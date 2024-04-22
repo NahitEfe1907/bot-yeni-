@@ -1,151 +1,93 @@
-# This example requires the 'message_content' privileged intent to function.
-
-import asyncio
-
 import discord
-import youtube_dl
-
+import time
+import random
 from discord.ext import commands
-
-# Suppress noise about console usage from errors
-youtube_dl.utils.bug_reports_message = lambda: ''
-
-
-ytdl_format_options = {
-    'format': 'bestaudio/best',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'noplaylist': True,
-    'nocheckcertificate': True,
-    'ignoreerrors': False,
-    'logtostderr': False,
-    'quiet': True,
-    'no_warnings': True,
-    'default_search': 'auto',
-    'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
-}
-
-ffmpeg_options = {
-    'options': '-vn',
-}
-
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
-
-
-class YTDLSource(discord.PCMVolumeTransformer):
-    def __init__(self, source, *, data, volume=0.5):
-        super().__init__(source, volume)
-
-        self.data = data
-
-        self.title = data.get('title')
-        self.url = data.get('url')
-
-    @classmethod
-    async def from_url(cls, url, *, loop=None, stream=False):
-        loop = loop or asyncio.get_event_loop()
-        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=not stream))
-
-        if 'entries' in data:
-            # take first item from a playlist
-            data = data['entries'][0]
-
-        filename = data['url'] if stream else ytdl.prepare_filename(data)
-        return cls(discord.FFmpegPCMAudio(filename, **ffmpeg_options), data=data)
-
-
-class Music(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-
-    @commands.command()
-    async def join(self, ctx, *, channel: discord.VoiceChannel):
-        """Joins a voice channel"""
-
-        if ctx.voice_client is not None:
-            return await ctx.voice_client.move_to(channel)
-
-        await channel.connect()
-
-    @commands.command()
-    async def play(self, ctx, *, query):
-        """Plays a file from the local filesystem"""
-
-        source = discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(query))
-        ctx.voice_client.play(source, after=lambda e: print(f'Player error: {e}') if e else None)
-
-        await ctx.send(f'Now playing: {query}')
-
-    @commands.command()
-    async def yt(self, ctx, *, url):
-        """Plays from a url (almost anything youtube_dl supports)"""
-
-        async with ctx.typing():
-            player = await YTDLSource.from_url(url, loop=self.bot.loop)
-            ctx.voice_client.play(player, after=lambda e: print(f'Player error: {e}') if e else None)
-
-        await ctx.send(f'Now playing: {player.title}')
-
-    @commands.command()
-    async def stream(self, ctx, *, url):
-        """Streams from a url (same as yt, but doesn't predownload)"""
-
-        async with ctx.typing():
-            player = await YTDLSource.from_url(url, loop=self.bot.loop, stream=True)
-            ctx.voice_client.play(player, after=lambda e: print(f'Player error: {e}') if e else None)
-
-        await ctx.send(f'Now playing: {player.title}')
-
-    @commands.command()
-    async def volume(self, ctx, volume: int):
-        """Changes the player's volume"""
-
-        if ctx.voice_client is None:
-            return await ctx.send("Not connected to a voice channel.")
-
-        ctx.voice_client.source.volume = volume / 100
-        await ctx.send(f"Changed volume to {volume}%")
-
-    @commands.command()
-    async def stop(self, ctx):
-        """Stops and disconnects the bot from voice"""
-
-        await ctx.voice_client.disconnect()
-
-    @play.before_invoke
-    @yt.before_invoke
-    @stream.before_invoke
-    async def ensure_voice(self, ctx):
-        if ctx.voice_client is None:
-            if ctx.author.voice:
-                await ctx.author.voice.channel.connect()
-            else:
-                await ctx.send("You are not connected to a voice channel.")
-                raise commands.CommandError("Author not connected to a voice channel.")
-        elif ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
-
 
 intents = discord.Intents.default()
 intents.message_content = True
+client = commands.Bot(command_prefix='!', intents=intents)
 
-bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or("!"),
-    description='Relatively simple music bot example',
-    intents=intents,
-)
-
-
-@bot.event
+@client.event
 async def on_ready():
-    print(f'Logged in as {bot.user} (ID: {bot.user.id})')
-    print('------')
+    print(f'{client.user} olarak giriş yaptık.')
 
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
 
-async def main():
-    async with bot:
-        await bot.add_cog(Music(bot))
-        await bot.start("   MTIyNzMzMTU1MjMyMTczNjc5NA.GgpD-L.Rv4SRDPpMrj6QKEip3uIjvx6JUP2GKxg-xMTrs")
+    if message.content.startswith('$merhaba'):
+        await message.channel.send("Selam!")
+    elif message.content.startswith('$bye'):
+        await message.channel.send("baiiii")
+    elif message.content.startswith('help'):
+        help_message = (
+            "Merhaba, ben bir yardımcı botum. İşte size yardımcı olabileceğim bazı komutlar:\n"
+            "- `merhaba`: Bot size `Selam!` diyecek.\n"
+            "- `Nasılsın?`: Bot size `İyiyim, sen nasılsın?` diyecek.\n"
+            "- `Naber?`: Bot size `Naber, ne var ne yok?` diyecek.\n"
+            "- `Günaydın`: Bot size `Günaydın, keyifli bir gün geçir!` diyecek.\n"
+            "- `İyi akşamlar`: Bot size `İyi akşamlar, günün nasıl geçti?` diyecek.\n"
+            "- `SA`, `sa`, `selamünaleyküm`: Bot size `Ve aleyküm Selâm` diyecek.\n"
+            "- `Ne yapıyorsun?`: Bot size `Seninle konuşuyorum, sen ne yapıyorsun?` diyecek.\n"
+            "- `Neler yapabilirsin?`: Bot size `Benimle konuşabilir, bilgi verebilirim ve eğlenceli oyunlar oynayabiliriz!` diyecek.\n"
+            "- `Nasıl yardımcı olabilirim?`: Bot size `Bana sormak istediğin bir şey var mı? Yardımcı olmaktan mutluluk duyarım.` diyecek.\n"
+            "- `Teşekkürler`: Bot size `Rica ederim, her zaman buradayım!` diyecek.\n"
+            "- `Görüşürüz`: Bot size `Görüşürüz, hoşça kal!` diyecek."
+        )
+        await message.channel.send(help_message)
+    elif message.content.startswith('merhaba'):
+        await message.channel.send("Selam!")
+    elif message.content.startswith('Nasılsın?'):
+        await message.channel.send("İyiyim, sen nasılsın?")
+    elif message.content.startswith('Naber?'):
+        await message.channel.send("Naber, ne var ne yok?")
+    elif message.content.startswith('Günaydın'):
+        await message.channel.send("Günaydın, keyifli bir gün geçir!")
+    elif message.content.startswith('İyi akşamlar'):
+        await message.channel.send("İyi akşamlar, günün nasıl geçti?")
+    elif message.content.startswith('SA'):
+        await message.channel.send("Ve aleyküm Selâm")
+    elif message.content.startswith('sa'):
+        await message.channel.send("Ve aleyküm Selâm")
+    elif message.content.startswith('selamünaleyküm'):
+        await message.channel.send("Ve aleyküm Selâm")
+    elif message.content.startswith('Ne yapıyorsun?'):
+        await message.channel.send("Seninle konuşuyorum, sen ne yapıyorsun?")
+    elif message.content.startswith('Neler yapabilirsin?'):
+        await message.channel.send("Benimle konuşabilir, bilgi verebilirim ve eğlenceli oyunlar oynayabiliriz!")
+    elif message.content.startswith('Nasıl yardımcı olabilirim?'):
+        await message.channel.send("Bana sormak istediğin bir şey var mı? Yardımcı olmaktan mutluluk duyarım.")
+    elif message.content.startswith('Teşekkürler'):
+        await message.channel.send("Rica ederim, her zaman buradayım!")
+    elif message.content.startswith('Görüşürüz'):
+        await message.channel.send("Görüşürüz, hoşça kal!")
+    else:
+        await message.channel.send(message.content)
 
+@client.command()
+async def yazi_tura(ctx):
+    para = random.randint(0, 1)
+    if para == 0:
+        await ctx.send(" Çıkan Sonuuuuuç")
+        time.sleep(2)
+        await ctx.send("Yazıııı")
+    else:
+        await ctx.send(" Çıkan Sonuuuuuç")
+        time.sleep(2)
+        await ctx.send("Turaaaaaa")
 
-asyncio.run(main())
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+    if message.content.startswith('https://www.youtube.com/'):
+        voice_channel = message.author.voice.channel
+        if voice_channel:
+            vc = await voice_channel.connect()
+            vc.play(discord.FFmpegPCMAudio(executable="path/to/ffmpeg.exe", source="path/to/video.mp4"))
+        else:
+            await message.channel.send("Ses kanalında değilsiniz, lütfen önce bir ses kanalına katılın.")
+    await client.process_commands(message)
+
+client.run("MTIyNzMzMTU1MjMyMTczNjc5NA.GXa4t-.Gv9idn8iJEyZsUEgN4AIlDnpSoMEcb4q06z6Bc")
